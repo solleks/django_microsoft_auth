@@ -14,6 +14,7 @@ from .conf import (
     CACHE_KEY_OPENID,
     CACHE_TIMEOUT,
 )
+from .models import AzureADConfiguration
 from .utils import get_scheme
 
 logger = logging.getLogger("django")
@@ -34,6 +35,7 @@ class MicrosoftClient(OAuth2Session):
     _config_url = "https://login.microsoftonline.com/{tenant}/v2.0/.well-known/openid-configuration"  # noqa
 
     config = None
+    azure_ad_config = None
 
     # required OAuth scopes
     SCOPE_MICROSOFT = ["openid", "email", "profile"]
@@ -42,6 +44,17 @@ class MicrosoftClient(OAuth2Session):
         from .conf import config
 
         self.config = config
+        self.azure_ad_config = None
+        try:
+            self.azure_ad_config = AzureADConfiguration.objects.get(
+                project='some_project')
+        except AzureADConfiguration.DoesNotExist:
+            self.azure_ad_config = AzureADConfiguration(
+                project='dummy',
+                tenant_id=self.config.MICROSOFT_AUTH_TENANT_ID,
+                client_id=self.config.MICROSOFT_AUTH_CLIENT_ID,
+                client_secret=self.config.MICROSOFT_AUTH_CLIENT_SECRET
+            )
 
         extra_scopes = self.config.MICROSOFT_AUTH_EXTRA_SCOPES
 
@@ -59,7 +72,7 @@ class MicrosoftClient(OAuth2Session):
         scheme = get_scheme(request, self.config)
 
         super().__init__(
-            self.config.MICROSOFT_AUTH_CLIENT_ID,
+            self.azure_ad_config.client_id,
             scope=scope,
             state=state,
             redirect_uri="{0}://{1}{2}".format(scheme, domain, path),
@@ -133,7 +146,7 @@ class MicrosoftClient(OAuth2Session):
                 token,
                 public_key,
                 algoithm="RS256",
-                audience=self.config.MICROSOFT_AUTH_CLIENT_ID,
+                audience=self.azure_ad_config.client_id,
             )
         except jwt.PyJWTError as e:
             logger.warn("could verify id_token sig: {}".format(e))
@@ -153,7 +166,7 @@ class MicrosoftClient(OAuth2Session):
 
         return super().fetch_token(  # pragma: no cover
             self.openid_config["token_endpoint"],
-            client_secret=self.config.MICROSOFT_AUTH_CLIENT_SECRET,
+            client_secret=self.azure_ad_config.client_secret,
             **kwargs
         )
 

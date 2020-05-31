@@ -33,3 +33,14 @@ class MicrosoftAccount(models.Model):
         return self.microsoft_id
 
 
+# TODO(Charlie): Max lengths are just estimated, not taken from any docs.
+# TODO(Charlie): Link SSO configurations to projects: 1 SSO -> many projects,
+#                1 project -> 0 or 1 SSO.
+class AzureADConfiguration(models.Model):
+    project = models.CharField(max_length=64)
+    tenant_id = models.CharField(max_length=64)
+    client_id = models.CharField(max_length=64)
+    client_secret = models.CharField(max_length=64)
+
+    def __str__(self):
+        return "Project: {}\nTenant ID: {}\nClient ID: {}\nClient secret: {}".format(self.project, self.tenant_id, self.client_id, self.client_secret)

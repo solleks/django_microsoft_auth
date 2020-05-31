@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 
 from .conf import config
-from .models import MicrosoftAccount
+from .models import MicrosoftAccount, AzureADConfiguration
 
 __all__ = [
     "MicrosoftAccountAdmin",
@@ -46,6 +46,7 @@ def _register_admins():
         admin.site.unregister(MicrosoftAccount)
 
     admin.site.register(MicrosoftAccount, MicrosoftAccountAdmin)
+    admin.site.register(AzureADConfiguration)
 
 
 def _get_inlines():
