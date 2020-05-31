@@ -4,8 +4,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.backends import ModelBackend
 
 from .client import MicrosoftClient
-from .conf import LOGIN_TYPE_XBL
-from .models import MicrosoftAccount, XboxLiveAccount
+from .models import MicrosoftAccount
 from .utils import get_hook
 
 logger = logging.getLogger("django")
@@ -14,7 +13,7 @@ User = get_user_model()
 
 class MicrosoftAuthenticationBackend(ModelBackend):
     """ Authentication backend to authenticate a user against their Microsoft
-        Uses Microsoft's Graph OAuth and XBL servers to authentiate. """
+        Uses Microsoft's Graph OAuth to authentiate. """
 
     config = None
     microsoft = None
@@ -54,18 +53,7 @@ class MicrosoftAuthenticationBackend(ModelBackend):
         return user
 
     def _authenticate_user(self):
-        if self.config.MICROSOFT_AUTH_LOGIN_TYPE == LOGIN_TYPE_XBL:
-            return self._authenticate_xbox_user()
-        else:
-            return self._authenticate_microsoft_user()
-
-    def _authenticate_xbox_user(self):
-        xbox_token = self.microsoft.fetch_xbox_token()
-
-        if "Token" in xbox_token:
-            response = self.microsoft.get_xbox_profile()
-            return self._get_user_from_xbox(response)
-        return None
+        return self._authenticate_microsoft_user()
 
     def _authenticate_microsoft_user(self):
         claims = self.microsoft.get_claims()
@@ -75,56 +63,8 @@ class MicrosoftAuthenticationBackend(ModelBackend):
 
         return None
 
-    def _get_user_from_xbox(self, data):
-        """ Retrieves existing Django user or creates
-            a new one from Xbox Live profile data """
-        user = None
-        xbox_user = self._get_xbox_user(data)
-
-        if xbox_user is not None:
-            self._verify_xbox_user(xbox_user)
-
-            user = xbox_user.user
-
-            if (
-                self.config.MICROSOFT_AUTH_XBL_SYNC_USERNAME
-                and user.username != xbox_user.gamertag
-            ):
-                user.username = xbox_user.gamertag
-                user.save()
-
-        return user
-
-    def _get_xbox_user(self, data):
-        xbox_user = None
-
-        try:
-            xbox_user = XboxLiveAccount.objects.get(xbox_id=data["xid"])
-            # update Gamertag since they can change over time
-            if xbox_user.gamertag != data["gtg"]:
-                xbox_user.gamertag = data["gtg"]
-                xbox_user.save()
-        except XboxLiveAccount.DoesNotExist:
-            if self.config.MICROSOFT_AUTH_AUTO_CREATE:
-                # create new Xbox Live Account
-                xbox_user = XboxLiveAccount(
-                    xbox_id=data["xid"], gamertag=data["gtg"]
-                )
-                xbox_user.save()
-
-        return xbox_user
-
-    def _verify_xbox_user(self, xbox_user):
-        if xbox_user.user is None:
-            user = User(username=xbox_user.gamertag)
-            user.save()
-
-            xbox_user.user = user
-            xbox_user.save()
-
     def _get_user_from_microsoft(self, data):
-        """ Retrieves existing Django user or creates
-            a new one from Xbox Live profile data """
+        """ Retrieves existing Django user """
         user = None
         microsoft_user = self._get_microsoft_user(data)
 
@@ -155,10 +95,7 @@ class MicrosoftAuthenticationBackend(ModelBackend):
             fullname = data.get("name")
             first_name, last_name = "", ""
             if fullname is not None:
-                try:
-                    first_name, last_name = fullname.split(" ", 1)
-                except ValueError:
-                    firstname = fullname
+                first_name, last_name = data["name"].split(" ", 1)
 
             try:
                 # create new Django user from provided data
@@ -206,7 +143,4 @@ class MicrosoftAuthenticationBackend(ModelBackend):
     def _call_hook(self, user):
         function = get_hook("MICROSOFT_AUTH_AUTHENTICATE_HOOK")
         if function is not None:
-            if self.config.MICROSOFT_AUTH_LOGIN_TYPE == LOGIN_TYPE_XBL:
-                function(user, self.microsoft.xbox_token)
-            else:
-                function(user, self.microsoft.token)
+            function(user, self.microsoft.token)

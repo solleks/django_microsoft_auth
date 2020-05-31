@@ -57,7 +57,7 @@ def microsoft_auth_validator(app_configs, **kwargs):
                         "auth might not work"
                     ),
                     hint=(
-                        "Microsoft/Xbox auth uses OAuth, which requires "
+                        "Microsoft auth uses OAuth, which requires "
                         "a real redirect URI to come back to"
                     ),
                     id="microsoft_auth.W002",

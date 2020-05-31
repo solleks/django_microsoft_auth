@@ -13,7 +13,6 @@ from .conf import (
     CACHE_KEY_JWKS,
     CACHE_KEY_OPENID,
     CACHE_TIMEOUT,
-    LOGIN_TYPE_XBL,
 )
 from .utils import get_scheme
 
@@ -34,18 +33,9 @@ class MicrosoftClient(OAuth2Session):
 
     _config_url = "https://login.microsoftonline.com/{tenant}/v2.0/.well-known/openid-configuration"  # noqa
 
-    _xbox_authorization_url = "https://login.live.com/oauth20_authorize.srf"
-    _xbox_token_url = (
-        "https://user.auth.xboxlive.com/user/authenticate"  # nosec
-    )
-    _profile_url = "https://xsts.auth.xboxlive.com/xsts/authorize"
-
-    xbox_token = {}
-
     config = None
 
     # required OAuth scopes
-    SCOPE_XBL = ["XboxLive.signin", "XboxLive.offline_access"]
     SCOPE_MICROSOFT = ["openid", "email", "profile"]
 
     def __init__(self, state=None, request=None, *args, **kwargs):
@@ -63,9 +53,6 @@ class MicrosoftClient(OAuth2Session):
         domain = current_site.domain
         path = reverse("microsoft_auth:auth-callback")
         scope = " ".join(self.SCOPE_MICROSOFT)
-
-        if self.config.MICROSOFT_AUTH_LOGIN_TYPE == LOGIN_TYPE_XBL:
-            scope = " ".join(self.SCOPE_XBL)
 
         scope = "{} {}".format(scope, extra_scopes).strip()
 
@@ -119,7 +106,6 @@ class MicrosoftClient(OAuth2Session):
         token = self.token["id_token"].encode("utf8")
 
         kid = jwt.get_unverified_header(token)["kid"]
-        jwk = None
         public_key = None
         for key in self.jwks:
             if kid == key["kid"]:
@@ -135,7 +121,7 @@ class MicrosoftClient(OAuth2Session):
                 cache.delete(CACHE_KEY_JWKS)
                 cache.delete(CACHE_KEY_OPENID)
 
-                return self.get_claims(allow_refresh=False)
+                return self.get_claims(allow_refesh=False)
             else:
                 logger.warn("could not find public key for id_token")
                 return None
@@ -156,11 +142,9 @@ class MicrosoftClient(OAuth2Session):
         return claims
 
     def authorization_url(self):
-        """ Generates Microsoft/Xbox or a Office 365 Authorization URL """
+        """ Generates Office 365 Authorization URL """
 
         auth_url = self.openid_config["authorization_endpoint"]
-        if self.config.MICROSOFT_AUTH_LOGIN_TYPE == LOGIN_TYPE_XBL:
-            auth_url = self._xbox_authorization_url
 
         return super().authorization_url(auth_url, response_mode="form_post")
 
@@ -173,104 +157,11 @@ class MicrosoftClient(OAuth2Session):
             **kwargs
         )
 
-    def fetch_xbox_token(self):
-        """ Fetches Xbox Live Auth token.
-
-            token must contain a valid access_token
-                - retrieved from fetch_token
-
-            Reversed engineered from existing Github repos,
-                no "official" API docs from Microsoft
-
-            Response will be similar to
-            {
-                'Token': 'token',
-                'IssueInstant': '2016-09-27T15:01:45.225637Z',
-                'DisplayClaims': {'xui': [{'uhs': '###################'}]},
-                'NotAfter': '2016-10-11T15:01:45.225637Z'
-            }
-        """
-
-        # Content-type MUST be json for Xbox Live
-        headers = {
-            "Content-type": "application/json",
-            "Accept": "application/json",
-        }
-        params = {
-            "RelyingParty": "http://auth.xboxlive.com",
-            "TokenType": "JWT",
-            "Properties": {
-                "AuthMethod": "RPS",
-                "SiteName": "user.auth.xboxlive.com",
-                "RpsTicket": "d={}".format(self.token["access_token"]),
-            },
-        }
-        response = requests.post(
-            self._xbox_token_url, data=json.dumps(params), headers=headers
-        )
-
-        if response.status_code == 200:
-            self.xbox_token = response.json()
-
-        return self.xbox_token
-
-    def get_xbox_profile(self):
-        """
-            Fetches the Xbox Live user profile from Xbox servers
-
-            xbox_token must contain a valid Xbox Live token
-                - retrieved from fetch_xbox_token
-
-            Reversed engineered from existing Github repos,
-                no "official" API docs from Microsoft
-
-            Response will be similar to
-            {
-                'NotAfter': '2016-09-28T07:19:21.9608601Z',
-                'DisplayClaims': {
-                    'xui': [
-                        {
-                            'agg': 'Adult',
-                            'uhs': '###################',
-                            'usr': '###',
-                            'xid': '################',
-                            'prv': '### ### ###...',
-                            'gtg': 'Gamertag'}]},
-                'IssueInstant': '2016-09-27T15:19:21.9608601Z',
-                'Token': 'token'}
-        """
-
-        if "Token" in self.xbox_token:
-            # Content-type MUST be json for Xbox Live
-            headers = {
-                "Content-type": "application/json",
-                "Accept": "application/json",
-            }
-            params = {
-                "RelyingParty": "http://xboxlive.com",
-                "TokenType": "JWT",
-                "Properties": {
-                    "UserTokens": [self.xbox_token["Token"]],
-                    "SandboxId": "RETAIL",
-                },
-            }
-            response = requests.post(
-                self._profile_url, data=json.dumps(params), headers=headers
-            )
-
-            if response.status_code == 200:
-                return response.json()["DisplayClaims"]["xui"][0]
-        return {}
-
     def valid_scopes(self, scopes):
-        """ Validates response scopes based on MICROSOFT_AUTH_LOGIN_TYPE """
+        """ Validates response scopes """
 
         scopes = set(scopes)
-        required_scopes = None
-        if self.config.MICROSOFT_AUTH_LOGIN_TYPE == LOGIN_TYPE_XBL:
-            required_scopes = set(self.SCOPE_XBL)
-        else:
-            required_scopes = set(self.SCOPE_MICROSOFT)
+        required_scopes = set(self.SCOPE_MICROSOFT)
 
         # verify all require_scopes are in scopes
         return required_scopes <= scopes
