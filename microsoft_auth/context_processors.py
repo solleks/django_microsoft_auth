@@ -41,7 +41,7 @@ def microsoft(request):
     signer = TimestampSigner()
     state = signer.sign(get_token(request))
     microsoft = MicrosoftClient(state=state, request=request)
-    auth_url = microsoft.authorization_url()[0]
+    auth_url = microsoft.authorization_url()
     return {
         "microsoft_login_enabled": config.MICROSOFT_AUTH_LOGIN_ENABLED,
         "microsoft_authorization_url": mark_safe(auth_url),  # nosec
