@@ -42,14 +42,11 @@ class MicrosoftAuthenticationBackend(ModelBackend):
             token = self.microsoft.fetch_token(code=code)
 
             # validate permission scopes
-            print('validate permission scopes')
             if "access_token" in token and self.microsoft.valid_scopes(
                 token["scope"]
             ):
-                print('Authenticate user')
                 user = self._authenticate_user()
 
-        print('user:', user)
         if user is not None:
             self._call_hook(user)
 
@@ -61,7 +58,6 @@ class MicrosoftAuthenticationBackend(ModelBackend):
     def _authenticate_microsoft_user(self):
         claims = self.microsoft.get_claims()
 
-        print('claims:', claims)
         if claims is not None:
             return self._get_user_from_microsoft(claims)
 

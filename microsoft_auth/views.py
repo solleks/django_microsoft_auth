@@ -60,19 +60,13 @@ class AuthenticateCallbackView(View):
         # validates state using Django CSRF system
         self._check_csrf(kwargs.get("state"))
 
-        print('Context #1', self.context)
-
         # validates response from Microsoft
         self._check_microsoft_response(
             kwargs.get("error"), kwargs.get("error_description")
         )
 
-        print('Context #2', self.context)
-
         # validates the code param and logs user in
         self._authenticate(kwargs.get("code"))
-
-        print('Context #3', self.context)
 
         # populates error_description if it does not exist yet
         if (
@@ -83,13 +77,9 @@ class AuthenticateCallbackView(View):
                 self.context["message"]["error"]
             ]
 
-        print('Context #4', self.context)
-
         function = get_hook("MICROSOFT_AUTH_CALLBACK_HOOK")
         if function is not None:
             self.context = function(self.request, self.context)
-
-        print('Context #5', self.context)
 
         self.context["message"] = mark_safe(  # nosec
             json.dumps({"microsoft_auth": self.context["message"]})
@@ -103,9 +93,7 @@ class AuthenticateCallbackView(View):
             state = ""
 
         try:
-            print('state:', state)
             state = signer.unsign(state, max_age=300)
-            print('unsigned state:', state)
         except BadSignature:  # pragma: no branch
             logger.debug("state has been tampered with")
             state = ""
@@ -154,38 +142,7 @@ class AuthenticateCallbackView(View):
             validates Microsoft response, attempts to authenticate user and
             returns simple HTML page with Javascript that will post a message
             to parent window with details of result """
-        print('GET request for Microsoft Auth Callback', request, request.GET.dict())
-
-        # START HERE
-        # GET /microsoft/auth-callback/?code=M9a5f80e3-42af-0957-016a-67f22424368a&state=4f4ed497-7870-4f8e-8412-697378f84646 HTTP/1.1" 500 93939
-
         context = self.get_context_data(**request.GET.dict())
-
-        print('GET context:', context)
-
-        status_code = 200
-        if "error" in context["message"]:
-            status_code = 400
-
-        return render(
-            request,
-            "microsoft/auth_callback.html",
-            context,
-            status=status_code,
-        )
-
-
-    def post(self, request):
-        """ main callback for Microsoft to call, using requests_oauthlib
-
-            validates Microsoft response, attempts to authenticate user and
-            returns simple HTML page with Javascript that will post a message
-            to parent window with details of result """
-        print('POST request for Microsoft Auth Callback', request, request.POST.dict())
-
-        context = self.get_context_data(**request.POST.dict())
-
-        print('POST context:', context)
 
         status_code = 200
         if "error" in context["message"]:
